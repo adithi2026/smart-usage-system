@@ -9,81 +9,71 @@ export default function Dashboard() {
   const [alert, setAlert] = useState("");
   const token = localStorage.getItem("token");
 
-  // Poll live smartmeter endpoint
   useEffect(() => {
-    let mounted = true;
-    async function fetchLive() {
-      try {
-        const data = await getJSON("/smartmeter/live", token);
-        if (!mounted) return;
-        setUsage(prev => [...prev.slice(-19), { time: data.time, power: data.power, anomaly: data.anomaly }]);
-        if (data.anomaly) setAlert(`🚨 ${data.reason}`);
-        else if (data.power > 650) setAlert("⚠️ Very high energy usage");
-        else if (data.power > 500) setAlert("⚠️ High energy usage");
-        else setAlert("");
-      } catch (err) {
-        console.error("live fetch err", err);
-      }
+    let x = true;
+    async function loadLive() {
+      const d = await getJSON("/smartmeter/live", token);
+      if (!x) return;
+
+      setUsage(prev => [...prev.slice(-19), { time: d.time, power: d.power }]);
+      if (d.anomaly) setAlert("🚨 " + d.reason);
+      else setAlert("");
     }
-    // immediate + poll
-    fetchLive();
-    const iv = setInterval(fetchLive, 2000);
-    return () => { mounted = false; clearInterval(iv); };
+
+    loadLive();
+    const iv = setInterval(loadLive, 2000);
+    return () => { x = false; clearInterval(iv); };
   }, []);
 
   useEffect(() => {
-    async function fetchExtras() {
-      try {
-        const p = await getJSON("/predict", token);
-        setPrediction(p);
-        const e = await getJSON("/ecoscore", token);
-        setEco(e);
-      } catch (err) {
-        console.error(err);
-      }
+    async function loadDetails() {
+      setPrediction(await getJSON("/predict"));
+      setEco(await getJSON("/ecoscore"));
     }
-    fetchExtras();
+    loadDetails();
   }, [usage]);
 
   return (
-    <div>
-      <h3>Dashboard</h3>
-      {alert && <div className="alert">{alert}</div>}
+    <div className="container">
+      <h2>Real-Time Energy Dashboard</h2>
 
-      <div style={{ width: "100%", height: 320 }}>
-        <ResponsiveContainer>
-          <LineChart data={usage}>
-            <CartesianGrid stroke="#eee" />
-            <XAxis dataKey="time" />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="power" stroke="#4f46e5" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+      {alert && <div className="alertBox">{alert}</div>}
+
+      <div className="card">
+        <h3>🔌 Live Power Usage</h3>
+        <div style={{ width: "100%", height: 350 }}>
+          <ResponsiveContainer>
+            <LineChart data={usage}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="time" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="power" stroke="#4f46e5" strokeWidth={3} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
-      {prediction && (
-        <div className="smallBox">
-          <h4>Estimated Monthly Bill</h4>
-          <div>₹ {prediction.predictedBill}</div>
-          <div style={{fontSize:12}}>Avg: {prediction.avgPower}W • Units: {prediction.unitsPerMonth}</div>
-        </div>
-      )}
+      <div className="card">
+        <h3> Estimated Monthly Bill</h3>
+        {prediction && (
+          <p style={{ fontSize: 22 }}>
+            <strong>₹ {prediction.predictedBill}</strong>  
+            <span style={{ fontSize: 14, marginLeft: 10 }}>
+              (Avg: {prediction.avgPower}W • Units: {prediction.unitsPerMonth})
+            </span>
+          </p>
+        )}
+      </div>
 
-      {eco && (
-        <div className="smallBox">
-          <h4>Eco Score</h4>
-          <div style={{fontSize:28, fontWeight:700}}>{eco.ecoScore}/100</div>
-          <div style={{fontSize:12}}>Avg: {eco.avgPower}W • Spikes: {eco.spikes}</div>
-        </div>
-      )}
-      <button
-  onClick={() => fetch("http://localhost:5000/trigger-alert")}
-  style={{ padding: "8px", margin: "10px", background: "#dc2626", color:"#fff", borderRadius:"6px" }}
->
-  🚨 Trigger Demo Alert
-</button>
-
+      <div className="card">
+        <h3>Eco Score</h3>
+        {eco && (
+          <p style={{ fontSize: 30, fontWeight: 700, color: "#16a34a" }}>
+            {eco.ecoScore} / 100
+          </p>
+        )}
+      </div>
     </div>
   );
 }

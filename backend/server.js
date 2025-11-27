@@ -1,4 +1,4 @@
-// ====== IMPORTS ======
+// ================== IMPORTS ==================
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -6,41 +6,40 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
+const swaggerUi = require("swagger-ui-express");
+const swaggerJsdoc = require("swagger-jsdoc");
 const twilioClient = require("twilio")(
   process.env.TWILIO_SID,
   process.env.TWILIO_AUTH
 );
-const swaggerUi = require("swagger-ui-express");
-const swaggerJsdoc = require("swagger-jsdoc");
 
-// ====== APP SETUP ======
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ====== SWAGGER CONFIG ======
+// ================== SWAGGER ==================
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
     info: {
       title: "Smart Energy Usage API",
       version: "1.0.0",
-      description: "API documentation for Smart Energy System"
+      description: "Backend for Smart Energy Monitoring System"
     },
-    servers: [{ url: `http://localhost:${process.env.PORT || 5000}` }]
+    servers: [{ url: "http://localhost:5000" }]
   },
   apis: ["./server.js"]
 };
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ====== MONGO CONNECT ======
+// ================== DB CONNECTION ==================
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.log("MongoDB error:", err.message));
 
-// ====== MONGOOSE USER MODEL ======
+// ================== USER MODEL ==================
 const userSchema = new mongoose.Schema({
   name: String,
   email: { type: String, unique: true },
@@ -49,11 +48,11 @@ const userSchema = new mongoose.Schema({
 });
 const User = mongoose.model("User", userSchema);
 
-// ====== IN_MEMORY USAGE STORE ======
+// ================== MEMORY USAGE DATA ==================
 let usageStore = [];
 
-// ====== SEND EMAIL ALERT ======
-async function sendEmailAlert(reason, power, toEmail) {
+// ================== EMAIL ALERT ==================
+async function sendEmailAlert(reason, power, email) {
   try {
     const transporter = nodemailer.createTransport({
       service: "gmail",
@@ -64,33 +63,32 @@ async function sendEmailAlert(reason, power, toEmail) {
     });
 
     await transporter.sendMail({
-      from: `"Smart Energy Monitor" <${process.env.EMAIL_USER}>`,
-      to: toEmail,
-      subject: "⚠️ Energy Usage Alert",
-      text: `Anomaly Detected!\nReason: ${reason}\nPower: ${power}W`
+      to: email,
+      from: process.env.EMAIL_USER,
+      subject: "⚠️ Energy Alert",
+      text: `Anomaly detected:\n${reason}\nPower: ${power}W`
     });
-
-    console.log("📧 Email sent to:", toEmail);
-  } catch (err) {
-    console.log("Email error:", err.message);
+    console.log("📧 Email sent");
+  } catch (e) {
+    console.log("Email error:", e.message);
   }
 }
 
-// ====== SEND SMS ALERT ======
-async function sendSMSAlert(reason, power, toPhone) {
+// ================== SMS ALERT ==================
+async function sendSMSAlert(reason, power, phone) {
   try {
     await twilioClient.messages.create({
-      body: `⚠️ Energy Alert: ${reason} | Power: ${power}W`,
       from: process.env.TWILIO_PHONE,
-      to: toPhone
+      to: phone,
+      body: `⚠️ Energy Alert: ${reason} | ${power}W`
     });
-    console.log("📱 SMS sent to:", toPhone);
-  } catch (err) {
-    console.log("SMS error:", err.message);
+    console.log("📱 SMS sent");
+  } catch (e) {
+    console.log("SMS error:", e.message);
   }
 }
 
-// ====== AUTH MIDDLEWARE ======
+// ================== AUTH MIDDLEWARE ==================
 function auth(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) return res.status(401).send({ message: "No token" });
@@ -100,76 +98,49 @@ function auth(req, res, next) {
     req.userId = decoded.id;
     next();
   } catch {
-    res.status(401).send({ message: "Invalid token" });
+    return res.status(401).send({ message: "Invalid token" });
   }
 }
 
-// =====================================================
-// ==================== AUTH ROUTES ====================
-// =====================================================
-
-/**
- * @swagger
- * /signup:
- *   post:
- *     summary: User Signup
- */
+// ================== SIGNUP ==================
 app.post("/signup", async (req, res) => {
   const { name, email, phone, password } = req.body;
 
   const exists = await User.findOne({ email });
-  if (exists)
-    return res.status(400).send({ message: "Email already exists" });
+  if (exists) return res.status(400).send({ message: "Email already in use" });
 
   const hash = await bcrypt.hash(password, 10);
 
-  const user = new User({
-    name,
-    email,
-    phone,
-    password: hash
-  });
-
+  const user = new User({ name, email, phone, password: hash });
   await user.save();
+
   res.send({ message: "Signup successful" });
 });
 
-/**
- * @swagger
- * /login:
- *   post:
- *     summary: User Login
- */
+// ================== LOGIN ==================
 app.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
   const user = await User.findOne({ email });
-  if (!user)
-    return res.status(400).send({ message: "User not found" });
+  if (!user) return res.status(400).send({ message: "User not found" });
 
   const match = await bcrypt.compare(password, user.password);
-  if (!match)
-    return res.status(400).send({ message: "Wrong password" });
+  if (!match) return res.status(400).send({ message: "Wrong password" });
 
   const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
 
   res.send({
     message: "Login successful",
     token,
-    user: { name: user.name, email: user.email, phone: user.phone }
+    user: {
+      name: user.name,
+      email: user.email,
+      phone: user.phone
+    }
   });
 });
 
-// =====================================================
-// ================= SMART METER LIVE ==================
-// =====================================================
-
-/**
- * @swagger
- * /smartmeter/live:
- *   get:
- *     summary: Get simulated live meter reading
- */
+// ================== LIVE SMART METER ==================
 app.get("/smartmeter/live", async (req, res) => {
   const power = Math.floor(Math.random() * 400) + 200;
   const time = new Date().toLocaleTimeString();
@@ -177,35 +148,33 @@ app.get("/smartmeter/live", async (req, res) => {
   usageStore.push({ time, power });
   if (usageStore.length > 200) usageStore.shift();
 
-  // ANOMALY DETECTION
+  // ===== ANOMALY DETECTION =====
   let anomaly = false;
   let reason = "";
 
   const last = usageStore.slice(-20);
   if (last.length > 5) {
-    const mean = last.reduce((a, b) => a + b.power, 0) / last.length;
+    const avg = last.reduce((a, b) => a + b.power, 0) / last.length;
     const variance =
-      last.reduce((a, b) => a + Math.pow(b.power - mean, 2), 0) /
-      last.length;
+      last.reduce((a, b) => a + (b.power - avg) ** 2, 0) / last.length;
     const stdDev = Math.sqrt(variance);
-
     const prev = last[last.length - 2].power;
 
-    if (power > mean + 2 * stdDev) {
+    if (power > avg + 2 * stdDev) {
       anomaly = true;
       reason = "Sudden spike detected";
     }
     if (power - prev > 150) {
       anomaly = true;
-      reason = "Sharp increase in usage";
+      reason = "Sharp usage increase";
     }
-    if (power > 700) {
+    if (power > 650) {
       anomaly = true;
-      reason = "High usage threshold exceeded";
+      reason = "High consumption threshold exceeded";
     }
   }
 
-  // ALERT IF ANOMALY
+  // ===== SEND ALERTS =====
   if (anomaly) {
     const user = await User.findOne();
     if (user) {
@@ -217,17 +186,14 @@ app.get("/smartmeter/live", async (req, res) => {
   res.send({
     time,
     power,
-    voltage: 230,
-    current: (power / 230).toFixed(2),
     anomaly,
-    reason
+    reason,
+    voltage: 230,
+    current: (power / 230).toFixed(2)
   });
 });
 
-// =====================================================
-// ===================== PREDICT ========================
-// =====================================================
-
+// ================== PREDICTION ==================
 app.get("/predict", (req, res) => {
   if (usageStore.length < 5)
     return res.send({ predictedBill: 0 });
@@ -235,20 +201,17 @@ app.get("/predict", (req, res) => {
   const last = usageStore.slice(-20);
   const avg = last.reduce((a, b) => a + b.power, 0) / last.length;
 
-  const unitsPerMonth = (avg / 1000) * 24 * 30;
-  const bill = unitsPerMonth * 7;
+  const units = (avg / 1000) * 24 * 30;
+  const bill = units * 7;
 
   res.send({
     avgPower: avg.toFixed(2),
-    unitsPerMonth: unitsPerMonth.toFixed(2),
+    unitsPerMonth: units.toFixed(2),
     predictedBill: bill.toFixed(2)
   });
 });
 
-// =====================================================
-// ===================== ECO SCORE ======================
-// =====================================================
-
+// ================== ECO SCORE ==================
 app.get("/ecoscore", (req, res) => {
   if (usageStore.length < 5)
     return res.send({ ecoScore: 50 });
@@ -269,29 +232,64 @@ app.get("/ecoscore", (req, res) => {
   });
 });
 
-// =====================================================
-// ============== DEMO ALERT TRIGGER ROUTE =============
-// =====================================================
-
-app.get("/trigger-alert", async (req, res) => {
-  const reason = "Demo alert triggered manually";
-  const power = 999;
-
-  const user = await User.findOne();
-
-  if (user) {
-    sendEmailAlert(reason, power, user.email);
-    sendSMSAlert(reason, power, user.phone);
+// ================== RECOMMENDATIONS ==================
+app.get("/recommendations", (req, res) => {
+  if (usageStore.length < 10) {
+    return res.send({
+      recommendations: ["Collecting data… come back soon!"]
+    });
   }
 
+  const last = usageStore.slice(-20);
+  const avg = last.reduce((a, b) => a + b.power, 0) / last.length;
+  const spikes = last.filter((x) => x.power > avg * 1.5).length;
+  const units = (avg / 1000) * 24 * 30;
+  const bill = units * 7;
+
+  let recs = [];
+
+  if (avg > 500)
+    recs.push("Reduce heavy appliance usage (AC, induction, heater).");
+
+  if (spikes > 5)
+    recs.push("Too many spikes — avoid running multiple devices together.");
+
+  if (bill > 1500)
+    recs.push("High monthly bill predicted — consider efficient appliances.");
+
+  recs.push("Turn off appliances when leaving the room.");
+  recs.push("Use LED bulbs and energy-saving devices.");
+
+  res.send({ recommendations: recs });
+});
+
+// ================== LEADERBOARD ==================
+app.get("/leaderboard", async (req, res) => {
+  const users = await User.find().select("-password");
+
+  const leaderboard = users.map((u) => {
+    const ecoScore = Math.floor(Math.random() * 50) + 50;
+    return {
+      name: u.name,
+      email: u.email,
+      ecoScore
+    };
+  });
+
+  leaderboard.sort((a, b) => b.ecoScore - a.ecoScore);
+
+  res.send(leaderboard);
+});
+
+// ================== DEMO ALERT ==================
+app.get("/trigger-alert", async (req, res) => {
+  const user = await User.findOne();
+  if (user) {
+    sendEmailAlert("Demo alert", 999, user.email);
+    sendSMSAlert("Demo alert", 999, user.phone);
+  }
   res.send({ message: "Demo alert sent!" });
 });
 
-// =====================================================
-// ==================== START SERVER ===================
-// =====================================================
-
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () =>
-  console.log(`🔥 Backend running at http://localhost:${PORT}`)
-);
+// ================== START SERVER ==================
+app.listen(5000, () => console.log("🔥 Backend running on 5000"));
