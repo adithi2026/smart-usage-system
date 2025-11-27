@@ -1,34 +1,11 @@
-.container {
-  text-align: center;
-  padding: 20px;
-  background: #f8fafc;
-  height: 100vh;
-}
-
-h2 {
-  color: #1e3a8a;
-}
-
-.alert {
-  background-color: #fee2e2;
-  color: #b91c1c;
-  padding: 10px;
-  margin: 10px auto;
-  width: 50%;
-  border-radius: 8px;
-  font-weight: bold;
-}
-
-.note {
-  margin-top: 10px;
-  font-size: 14px;
-  color: #475569;
-}
-.predictionBox {
-  background: #e0f7e9;
-  padding: 12px;
-  width: 250px;
-  margin: 15px auto;
-  border-radius: 10px;
-  box-shadow: 0 2px 5px #d1d5db;
-}
+/* basic styling */
+body { font-family: Arial, sans-serif; background: #f8fafc; }
+.container { max-width: 900px; margin: 18px auto; padding: 18px; text-align:center; }
+.authBox { background:#fff; padding:18px; border-radius:8px; display:inline-block; margin:10px; width:320px; }
+.authBox input { display:block; width:100%; margin:8px 0; padding:8px; border-radius:6px; border:1px solid #ddd; }
+.authBox button { padding:8px 12px; border-radius:6px; background:#2563eb; color:#fff; border:none; cursor:pointer; }
+.msg { margin-top:10px; color:#c00; }
+.alert { background:#fee2e2; color:#b91c1c; padding:10px; margin:12px auto; width:70%; border-radius:8px; font-weight:700; }
+.smallBox { display:inline-block; background:#fff; padding:12px; margin:10px; border-radius:8px; box-shadow: 0 2px 6px rgba(0,0,0,0.06);}
+.note { margin-top:18px; color:#666; }
+button { margin: 0 6px; padding:8px 10px; border-radius:6px; border:none; background:#111827; color:#fff; cursor:pointer; }
